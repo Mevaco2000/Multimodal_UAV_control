@@ -52,7 +52,7 @@ def load_voice_predictor_module():
 voice_predictor = load_voice_predictor_module()
 
 
-DEFAULT_GESTURE_MODEL_PATH = SCRIPT_DIR / "artifacts" / "moja_wersja" / "gestures_v5_cl_arm.pt"
+DEFAULT_GESTURE_MODEL_PATH = SCRIPT_DIR / "gestures_v5_cl_arm.pt"
 DEFAULT_CONNECTION_URL = "udpin://127.0.0.1:14540"
 
 
