@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Lokalne modele (duze pliki binarne)
+artifacts/
+models/
+*.pt
+*.pth
+*.onnx
+*.task
