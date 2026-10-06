@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import asyncio
 import importlib.util
 import sys
@@ -17,7 +16,10 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from mavsdk import System
-from mavsdk.offboard import OffboardError, VelocityBodyYawspeed
+try:
+    from mavsdk.plugins.offboard import OffboardError, VelocityBodyYawspeed
+except ImportError:
+    from mavsdk.offboard import OffboardError, VelocityBodyYawspeed
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 VOICE_MODULE_PATH = SCRIPT_DIR / "realtime_predict.py"
@@ -52,6 +54,35 @@ voice_predictor = load_voice_predictor_module()
 
 DEFAULT_GESTURE_MODEL_PATH = SCRIPT_DIR / "artifacts" / "moja_wersja" / "gestures_v5_cl_arm.pt"
 DEFAULT_CONNECTION_URL = "udpin://127.0.0.1:14540"
+
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    connection_url: str = DEFAULT_CONNECTION_URL
+    gesture_model_path: Path = DEFAULT_GESTURE_MODEL_PATH
+    pose_model_path: Path = DEFAULT_POSE_MODEL_PATH
+    camera_index: int = 0
+    device: str = "auto"
+    voice_confidence_threshold: float = 0.55
+    gesture_confidence_threshold: float = 0.85
+    voice_repeat_count: int = 2
+    gesture_repeat_count: int = 5
+    voice_priority_window: float = 2.0
+    linear_speed: float = 0.2
+    vertical_speed: float = 0.12
+    yaw_rate: float = 6.0
+    slow_down_factor: float = 0.8
+    min_linear_speed: float = 0.2
+    min_pose_detection_confidence: float = 0.5
+    min_pose_presence_confidence: float = 0.5
+    min_tracking_confidence: float = 0.5
+    landmark_smoothing_alpha: float = 0.6
+    visibility_threshold: float = 0.4
+    enhance_contrast: bool = False
+    hide_window: bool = False
+
+
+CONFIG = RuntimeConfig()
 
 
 @dataclass(frozen=True)
@@ -242,7 +273,21 @@ class DroneController:
         slow_down_factor: float,
         min_linear_speed: float,
     ) -> None:
-        self.drone = System()
+        self.drone = None
+        self._native_mode = False
+        self._native_mavsdk = None
+        self._native_system = None
+        self._native_action = None
+        self._native_offboard = None
+        self._native_connection_handle = None
+        try:
+            self.drone = System()
+        except TypeError:
+            from mavsdk.asyncio import ComponentType, Configuration, Mavsdk
+
+            self._native_mode = True
+            configuration = Configuration.create_with_component_type(ComponentType.GROUND_STATION)
+            self._native_mavsdk = Mavsdk(configuration)
         self.connection_url = connection_url
         self.linear_speed = linear_speed
         self.vertical_speed = vertical_speed
@@ -253,8 +298,51 @@ class DroneController:
         self.offboard_started = False
         self.active_motion = VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
 
+    @property
+    def action(self):
+        if self._native_mode:
+            if self._native_action is None:
+                raise RuntimeError("Plugin Action nie jest gotowy. Wywolaj najpierw connect().")
+            return self._native_action
+        if self.drone is None:
+            raise RuntimeError("System MAVSDK nie zostal zainicjalizowany.")
+        return self.drone.action
+
+    @property
+    def offboard(self):
+        if self._native_mode:
+            if self._native_offboard is None:
+                raise RuntimeError("Plugin Offboard nie jest gotowy. Wywolaj najpierw connect().")
+            return self._native_offboard
+        if self.drone is None:
+            raise RuntimeError("System MAVSDK nie zostal zainicjalizowany.")
+        return self.drone.offboard
+
     async def connect(self) -> None:
         print(f"[mavsdk] Laczenie z {self.connection_url}...")
+        if self._native_mode:
+            from mavsdk.asyncio.plugins.action import ActionAsync
+            from mavsdk.asyncio.plugins.offboard import OffboardAsync
+
+            if self._native_mavsdk is None:
+                raise RuntimeError("Brak instancji natywnego klienta MAVSDK.")
+
+            self._native_connection_handle = await self._native_mavsdk.add_any_connection(self.connection_url)
+            self._native_system = await self._native_mavsdk.first_autopilot(timeout_s=10.0)
+            if self._native_system is None:
+                raise RuntimeError(
+                    f"Nie wykryto autopilota dla polaczenia: {self.connection_url}. "
+                    "Sprawdz URL i czy endpoint MAVSDK/SITL dziala."
+                )
+
+            self._native_action = ActionAsync(self._native_system)
+            self._native_offboard = OffboardAsync(self._native_system)
+            print("[mavsdk] Polaczono z systemem (native MAVSDK v4).")
+            return
+
+        if self.drone is None:
+            raise RuntimeError("System MAVSDK nie zostal zainicjalizowany.")
+
         await self.drone.connect(system_address=self.connection_url)
         async for state in self.drone.core.connection_state():
             if state.is_connected:
@@ -264,23 +352,40 @@ class DroneController:
     async def stop(self) -> None:
         if self.offboard_started:
             try:
-                await self.drone.offboard.set_velocity_body(VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0))
+                await self.offboard.set_velocity_body(VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0))
             except Exception:
                 pass
 
             try:
-                await self.drone.offboard.stop()
+                await self.offboard.stop()
             except OffboardError:
                 pass
             self.offboard_started = False
+
+    async def shutdown(self) -> None:
+        if not self._native_mode or self._native_mavsdk is None:
+            return
+
+        if self._native_connection_handle is not None:
+            try:
+                await self._native_mavsdk.remove_connection(self._native_connection_handle)
+            except Exception:
+                pass
+            self._native_connection_handle = None
+
+        self._native_mavsdk.destroy()
+        self._native_mavsdk = None
+        self._native_system = None
+        self._native_action = None
+        self._native_offboard = None
 
     async def ensure_offboard(self) -> None:
         if self.offboard_started:
             return
 
-        await self.drone.offboard.set_velocity_body(VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0))
+        await self.offboard.set_velocity_body(VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0))
         try:
-            await self.drone.offboard.start()
+            await self.offboard.start()
         except OffboardError as exc:
             raise RuntimeError(f"Nie udalo sie uruchomic offboard: {exc}") from exc
         self.offboard_started = True
@@ -288,7 +393,7 @@ class DroneController:
     async def hover(self) -> None:
         await self.ensure_offboard()
         self.active_motion = VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
-        await self.drone.offboard.set_velocity_body(self.active_motion)
+        await self.offboard.set_velocity_body(self.active_motion)
 
     async def set_continuous_velocity(
         self,
@@ -304,7 +409,7 @@ class DroneController:
             down_m_s,
             yawspeed_deg_s,
         )
-        await self.drone.offboard.set_velocity_body(self.active_motion)
+        await self.offboard.set_velocity_body(self.active_motion)
 
     async def refresh_active_motion(self) -> None:
         motion = self.active_motion
@@ -325,18 +430,18 @@ class DroneController:
 
         self.active_motion = motion
         if self.offboard_started:
-            await self.drone.offboard.set_velocity_body(self.active_motion)
+            await self.offboard.set_velocity_body(self.active_motion)
 
     async def execute_command(self, label: str, source: str) -> None:
         print(f"[cmd] {source}: {label}")
         try:
             if label == "arm":
-                await self.drone.action.arm()
+                await self.action.arm()
                 return
 
             if label == "disarm":
                 await self.stop()
-                await self.drone.action.disarm()
+                await self.action.disarm()
                 return
 
             if label == "dispatch":
@@ -345,7 +450,7 @@ class DroneController:
 
             if label == "land":
                 await self.stop()
-                await self.drone.action.land()
+                await self.action.land()
                 return
 
             if label == "hover":
@@ -655,49 +760,20 @@ class GestureRecognizer(threading.Thread):
                 cv2.destroyAllWindows()
 
 
-def build_argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Sterowanie dronem przez MAVSDK z komend glosowych i gestow MediaPipe."
-    )
-    parser.add_argument("--connection-url", default=DEFAULT_CONNECTION_URL, help="Adres systemu MAVSDK, np. udp://127.0.0.1:14550.")
-    parser.add_argument("--gesture-model-path", type=Path, default=DEFAULT_GESTURE_MODEL_PATH, help="Sciezka do flagowego modelu gestow MediaPipe-LSTM.")
-    parser.add_argument("--pose-model-path", type=Path, default=DEFAULT_POSE_MODEL_PATH, help="Sciezka do modelu pozy MediaPipe (.task).")
-    parser.add_argument("--camera-index", type=int, default=0, help="Indeks kamery dla inferencji gestow.")
-    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"], help="Urzadzenie dla modelu LSTM gestow.")
-    parser.add_argument("--voice-confidence-threshold", type=float, default=0.55, help="Minimalna pewnosc komendy glosowej.")
-    parser.add_argument("--gesture-confidence-threshold", type=float, default=0.85, help="Minimalna pewnosc gestu.")
-    parser.add_argument("--voice-repeat-count", type=int, default=2, help="Ile identycznych komend glosowych z rzedu jest wymagane.")
-    parser.add_argument("--gesture-repeat-count", type=int, default=5, help="Ile identycznych predykcji gestu z rzedu jest wymagane.")
-    parser.add_argument("--voice-priority-window", type=float, default=2.0, help="Przez ile sekund po komendzie glosowej ignorowac gesty.")
-    parser.add_argument("--linear-speed", type=float, default=0.2, help="Bardzo ostrozna predkosc ruchu do przodu/bokiem w m/s.")
-    parser.add_argument("--vertical-speed", type=float, default=0.12, help="Bardzo ostrozna predkosc w osi Z w m/s.")
-    parser.add_argument("--yaw-rate", type=float, default=6.0, help="Bardzo ostrozna predkosc obrotu yaw w stopniach na sekunde.")
-    parser.add_argument("--slow-down-factor", type=float, default=0.8, help="Mnoznik dla komendy slow_down.")
-    parser.add_argument("--min-linear-speed", type=float, default=0.2, help="Minimalna predkosc po kolejnych slow_down.")
-    parser.add_argument("--min-pose-detection-confidence", type=float, default=0.5)
-    parser.add_argument("--min-pose-presence-confidence", type=float, default=0.5)
-    parser.add_argument("--min-tracking-confidence", type=float, default=0.5)
-    parser.add_argument("--landmark-smoothing-alpha", type=float, default=0.6)
-    parser.add_argument("--visibility-threshold", type=float, default=0.4)
-    parser.add_argument("--enhance-contrast", action="store_true", help="Wlacz lokalne podbicie kontrastu klatek kamery.")
-    parser.add_argument("--hide-window", action="store_true", help="Nie pokazuj okna OpenCV z inferencja gestow.")
-    return parser
-
-
-async def async_main(args: argparse.Namespace) -> None:
+async def async_main(config: RuntimeConfig) -> None:
     stop_event = threading.Event()
     command_status = CommandStatus()
     control_mode = ControlMode()
     input_history = InputHistory()
     voice_queue: Queue[CommandEvent] = Queue()
     gesture_queue: Queue[CommandEvent] = Queue()
-    voice_gate = ConfirmationGate(args.voice_repeat_count, args.voice_confidence_threshold)
-    gesture_gate = ConfirmationGate(args.gesture_repeat_count, args.gesture_confidence_threshold)
+    voice_gate = ConfirmationGate(config.voice_repeat_count, config.voice_confidence_threshold)
+    gesture_gate = ConfirmationGate(config.gesture_repeat_count, config.gesture_confidence_threshold)
     last_voice_command_at = 0.0
 
     def is_voice_priority_active(now: float | None = None) -> bool:
         current_time = time.monotonic() if now is None else now
-        return (current_time - last_voice_command_at) < args.voice_priority_window
+        return (current_time - last_voice_command_at) < config.voice_priority_window
 
     def handle_prediction(source: str, label: str | None, confidence: float | None) -> None:
         nonlocal last_voice_command_at
@@ -726,12 +802,12 @@ async def async_main(args: argparse.Namespace) -> None:
         gesture_queue.put(event)
 
     controller = DroneController(
-        connection_url=args.connection_url,
-        linear_speed=args.linear_speed,
-        vertical_speed=args.vertical_speed,
-        yaw_rate_deg_s=args.yaw_rate,
-        slow_down_factor=args.slow_down_factor,
-        min_linear_speed=args.min_linear_speed,
+        connection_url=config.connection_url,
+        linear_speed=config.linear_speed,
+        vertical_speed=config.vertical_speed,
+        yaw_rate_deg_s=config.yaw_rate,
+        slow_down_factor=config.slow_down_factor,
+        min_linear_speed=config.min_linear_speed,
     )
     await controller.connect()
 
@@ -742,18 +818,18 @@ async def async_main(args: argparse.Namespace) -> None:
         command_status=command_status,
         control_mode=control_mode,
         input_history=input_history,
-        camera_index=args.camera_index,
-        model_path=args.gesture_model_path,
-        pose_model_path=args.pose_model_path,
-        device_name=args.device,
-        confidence_threshold=args.gesture_confidence_threshold,
-        show_window=not args.hide_window,
-        min_pose_detection_confidence=args.min_pose_detection_confidence,
-        min_pose_presence_confidence=args.min_pose_presence_confidence,
-        min_tracking_confidence=args.min_tracking_confidence,
-        landmark_smoothing_alpha=args.landmark_smoothing_alpha,
-        visibility_threshold=args.visibility_threshold,
-        enhance_contrast_frames=args.enhance_contrast,
+        camera_index=config.camera_index,
+        model_path=config.gesture_model_path,
+        pose_model_path=config.pose_model_path,
+        device_name=config.device,
+        confidence_threshold=config.gesture_confidence_threshold,
+        show_window=not config.hide_window,
+        min_pose_detection_confidence=config.min_pose_detection_confidence,
+        min_pose_presence_confidence=config.min_pose_presence_confidence,
+        min_tracking_confidence=config.min_tracking_confidence,
+        landmark_smoothing_alpha=config.landmark_smoothing_alpha,
+        visibility_threshold=config.visibility_threshold,
+        enhance_contrast_frames=config.enhance_contrast,
     )
 
     voice_thread.start()
@@ -794,22 +870,23 @@ async def async_main(args: argparse.Namespace) -> None:
     finally:
         stop_event.set()
         await controller.stop()
+        await controller.shutdown()
         voice_thread.join(timeout=1.0)
         gesture_thread.join(timeout=1.0)
 
 
 def main() -> None:
-    args = build_argument_parser().parse_args()
+    config = CONFIG
     print("Sterowanie multimodalne uruchomione.")
-    print(f"  MAVSDK:   {args.connection_url}")
-    print(f"  Gesty:    {args.gesture_model_path}")
+    print(f"  MAVSDK:   {config.connection_url}")
+    print(f"  Gesty:    {config.gesture_model_path}")
     print(f"  Glos:     {voice_predictor.MODEL_PATH}")
     print(
-        f"  Potwierdzenia: glos={args.voice_repeat_count}x, gest={args.gesture_repeat_count}x"
+        f"  Potwierdzenia: glos={config.voice_repeat_count}x, gest={config.gesture_repeat_count}x"
     )
     print("Zatrzymanie: Ctrl+C lub q w oknie OpenCV.")
     try:
-        asyncio.run(async_main(args))
+        asyncio.run(async_main(config))
     except KeyboardInterrupt:
         print("\nZatrzymano sterowanie multimodalne.")
 
