@@ -22,18 +22,18 @@ class YoloPoseModel:
 YOLO_POSE_MODELS: dict[str, YoloPoseModel] = {
     "n": YoloPoseModel(
         key="n",
-        file_name="yolov8n-pose.pt",
-        url="https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8n-pose.pt",
+        file_name="yolo26n-pose.pt",
+        url="https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n-pose.pt",
     ),
     "s": YoloPoseModel(
         key="s",
-        file_name="yolov8s-pose.pt",
-        url="https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8s-pose.pt",
+        file_name="yolo26s-pose.pt",
+        url="https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26s-pose.pt",
     ),
     "m": YoloPoseModel(
         key="m",
-        file_name="yolov8m-pose.pt",
-        url="https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8m-pose.pt",
+        file_name="yolo26m-pose.pt",
+        url="https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26m-pose.pt",
     ),
 }
 

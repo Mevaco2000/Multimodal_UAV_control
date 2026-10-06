@@ -45,7 +45,7 @@ Do pobrania modelu keypointów YOLO-Pose możesz użyć:
 python download_keypoint_models.py
 ```
 
-Domyślnie pobierany jest `yolov8n-pose.pt` do folderu `models/keypoints/`.
+Domyślnie pobierany jest `yolo26n-pose.pt` do folderu `models/keypoints/`.
 Możesz wybrać inny rozmiar:
 
 ```bash
