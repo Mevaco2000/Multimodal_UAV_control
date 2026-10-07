@@ -97,8 +97,8 @@ git lfs install
 6. Sklonuj repozytorium i pobierz pliki LFS:
 
 ```bash
-git clone <URL_REPOZYTORIUM>
-cd <FOLDER_REPOZYTORIUM>
+git clone https://github.com/Mevaco2000/Multimodal_UAV_control.git
+cd Multimodal_UAV_control
 git lfs pull
 ```
 
