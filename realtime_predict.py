@@ -31,7 +31,6 @@ def resolve_asset_path(file_name: str) -> Path:
 
 
 MODEL_PATH = resolve_asset_path("model_wav2vec2_commands.torchscript.pt")
-CHECKPOINT_PATH = resolve_asset_path("model_wav2vec2_commands.pt")
 SAMPLE_RATE = 16000
 CLIP_SAMPLES = 24000
 TARGET_RMS = 0.08
@@ -46,8 +45,22 @@ BLOCKSIZE = 512
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-checkpoint_raw = torch.load(CHECKPOINT_PATH, map_location=DEVICE)
-CLASSES: list[str] = checkpoint_raw["classes"]
+CLASSES: list[str] = [
+    "arm",
+    "disarm",
+    "dispatch",
+    "hover",
+    "land",
+    "move_ahead",
+    "move_back",
+    "move_down",
+    "move_left",
+    "move_right",
+    "move_upward",
+    "slow_down",
+    "turn_left",
+    "turn_right",
+]
 model = torch.jit.load(MODEL_PATH, map_location=DEVICE)
 model.eval()
 

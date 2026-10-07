@@ -34,10 +34,10 @@ Oczekiwane pliki modeli:
 
 - `artifacts/moja_wersja/gestures_v5_cl_arm.pt` (domyślny model gestów),
 - `pose_landmarker_lite.task` (model MediaPipe Pose),
-- `model_wav2vec2_commands.torchscript.pt` (model głosowy),
-- `model_wav2vec2_commands.pt` (checkpoint z listą klas głosowych).
+- `model_wav2vec2_commands.torchscript.pt` (model głosowy).
 
 > W repozytorium **nie ma** plików modeli (`.pt`, `.task`). Musisz dostarczyć je lokalnie przed uruchomieniem.
+> Jeżeli modele są przechowywane w Git LFS, po klonowaniu wykonaj `git lfs pull`, żeby pobrać pełne pliki binarne.
 
 Do pobrania modelu keypointów YOLO-Pose możesz użyć:
 
@@ -71,6 +71,46 @@ Zależności z `requirements.txt`:
 - `torch`
 - `mavsdk`
 - `sounddevice`
+
+---
+
+## Instalacja Git i Git LFS (dla początkujących, Windows)
+
+Jeżeli nie masz jeszcze Git/Git LFS, wykonaj te kroki:
+
+1. Zainstaluj **Git for Windows**:
+   - wejdź na: `https://git-scm.com/download/win`
+   - uruchom instalator i zostaw domyślne opcje.
+2. Otwórz nowy terminal (PowerShell) i sprawdź:
+
+```bash
+git --version
+```
+
+3. Zainstaluj **Git LFS**:
+   - wejdź na: `https://git-lfs.com/`
+   - pobierz instalator dla Windows i zainstaluj.
+4. W nowym terminalu sprawdź:
+
+```bash
+git lfs version
+```
+
+5. Jednorazowo aktywuj Git LFS:
+
+```bash
+git lfs install
+```
+
+6. Sklonuj repozytorium i pobierz pliki LFS:
+
+```bash
+git clone <URL_REPOZYTORIUM>
+cd <FOLDER_REPOZYTORIUM>
+git lfs pull
+```
+
+Po tym kroku pliki modeli śledzone przez LFS powinny być dostępne lokalnie.
 
 ---
 
