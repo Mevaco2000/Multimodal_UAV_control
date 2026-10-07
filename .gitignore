@@ -9,3 +9,6 @@ models/
 *.pth
 *.onnx
 *.task
+!/gestures_v5_cl_arm.pt
+!/model_wav2vec2_commands.torchscript.pt
+!/pose_landmarker_lite.task
