@@ -26,7 +26,6 @@ VOICE_MODULE_PATH = SCRIPT_DIR / "realtime_predict.py"
 
 from live_gesture_inference import (
     DEFAULT_LANDMARK_INDICES,
-    DEFAULT_POSE_MODEL_PATH,
     apply_visibility_threshold,
     create_pose_landmarker,
     draw_pose_overlay,
@@ -53,6 +52,7 @@ voice_predictor = load_voice_predictor_module()
 
 
 DEFAULT_GESTURE_MODEL_PATH = SCRIPT_DIR / "gestures_v5_cl_arm.pt"
+DEFAULT_POSE_MODEL_PATH = SCRIPT_DIR / "pose_landmarker_lite.task"
 DEFAULT_CONNECTION_URL = "udpin://127.0.0.1:14540"
 
 

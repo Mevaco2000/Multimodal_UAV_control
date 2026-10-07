@@ -36,22 +36,7 @@ Oczekiwane pliki modeli:
 - `pose_landmarker_lite.task` (model MediaPipe Pose),
 - `model_wav2vec2_commands.torchscript.pt` (model głosowy).
 
-> W repozytorium **nie ma** plików modeli (`.pt`, `.task`). Musisz dostarczyć je lokalnie przed uruchomieniem.
-> Jeżeli modele są przechowywane w Git LFS, po klonowaniu wykonaj `git lfs pull`, żeby pobrać pełne pliki binarne.
-
-Do pobrania modelu keypointów YOLO-Pose możesz użyć:
-
-```bash
-python download_keypoint_models.py
-```
-
-Domyślnie pobierany jest `yolo26n-pose.pt` do folderu `models/keypoints/`.
-Możesz wybrać inny rozmiar:
-
-```bash
-python download_keypoint_models.py --model s
-python download_keypoint_models.py --model m
-```
+> Modele są przechowywane w Git LFS. Po klonowaniu wykonaj `git lfs pull`, żeby pobrać pełne pliki binarne (`.pt`, `.task`).
 
 ---
 
@@ -74,23 +59,30 @@ Zależności z `requirements.txt`:
 
 ---
 
-## Instalacja Git i Git LFS (dla początkujących, Windows)
+## Instalacja Git i Git LFS
 
 Jeżeli nie masz jeszcze Git/Git LFS, wykonaj te kroki:
 
-1. Zainstaluj **Git for Windows**:
-   - wejdź na: `https://git-scm.com/download/win`
-   - uruchom instalator i zostaw domyślne opcje.
-2. Otwórz nowy terminal (PowerShell) i sprawdź:
+1. Na Raspberry Pi OS zainstaluj Git:
+
+```bash
+sudo apt update
+sudo apt install -y git
+```
+
+2. Sprawdź instalację:
 
 ```bash
 git --version
 ```
 
 3. Zainstaluj **Git LFS**:
-   - wejdź na: `https://git-lfs.com/`
-   - pobierz instalator dla Windows i zainstaluj.
-4. W nowym terminalu sprawdź:
+
+```bash
+sudo apt install -y git-lfs
+```
+
+4. Sprawdź instalację:
 
 ```bash
 git lfs version
@@ -120,7 +112,7 @@ W folderze projektu:
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
